@@ -5,39 +5,39 @@ import math
 import time
 import random
 
-jugadores = {}   # {id: {...}}
+players = {}   # {id: {...}}
 id_count = 0
 inputs = {}      # {id: {"move": [dx,dy], "shoot": [mx,my]}}
 conns = {}  # {id: conn}
-health_pickups = []  # Lista de vidas en el mapa: [{"x": x, "y": y, "id": unique_id}, ...]
-health_pickup_id = 0  # ID único para cada vida
+health_pickups = []  # List of health pickups on the map : [{"x": x, "y": y, "id": unique_id}, ...]
+health_pickup_id = 0  # Unique ID for each health pickup
 MAP_WIDTH, MAP_HEIGHT = 2000, 2000
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 lock = threading.Lock()
 
-# Colores disponibles para jugadores
+# Available player colors
 PLAYER_COLORS = [
-    (255, 100, 100),  # Rojo
-    (100, 255, 100),  # Verde
-    (100, 100, 255),  # Azul
-    (255, 255, 100),  # Amarillo
+    (255, 100, 100),  # Red
+    (100, 255, 100),  # Green
+    (100, 100, 255),  # Blue
+    (255, 255, 100),  # Yellow
     (255, 100, 255),  # Magenta
-    (100, 255, 255),  # Cian
-    (255, 150, 100),  # Naranja
-    (150, 255, 150),  # Verde claro
+    (100, 255, 255),  # Cyan
+    (255, 150, 100),  # Orange
+    (150, 255, 150),  # Light Green
 ]
 
 def get_spawn_position():
-    """Genera una posición de spawn aleatoria en el mapa"""
+    """Generate a random spawn position on the map"""
     return random.randint(50, MAP_WIDTH-50), random.randint(50, MAP_HEIGHT-50)
 
 def get_player_color():
-    """Asigna un color aleatorio al jugador"""
+    """Assign a random color to the player"""
     return random.choice(PLAYER_COLORS)
 
 def spawn_health_pickup():
-    """Genera una nueva vida en una posición aleatoria"""
+    """Generate a new health pickup at a random position"""
     global health_pickup_id
     health_pickup_id += 1
     return {
@@ -47,26 +47,26 @@ def spawn_health_pickup():
     }
 
 def maintain_health_pickups():
-    """Mantiene el número de vidas igual al número de jugadores"""
+    """Maintain the number of health pickups equal to the number of players"""
     global health_pickups
-    current_players = len([j for j in jugadores.values() if not j.get("spectator", False)])
-    target_pickups = max(1, current_players)  # Mínimo 1 vida
+    current_players = len([p for p in players.values() if not p.get("spectator", False)])
+    target_pickups = max(1, current_players)  # Min 1 health pickup
 
-    # Agregar vidas si faltan
+    # Add health pickups if needed
     while len(health_pickups) < target_pickups:
         health_pickups.append(spawn_health_pickup())
 
-    # Remover vidas si sobran
+    # Remove excess health pickups
     while len(health_pickups) > target_pickups:
         health_pickups.pop()
 
-def manejar_cliente(conn, jugador_id):
-    global jugadores, inputs, conns
+def manage_client(conn, player_id):
+    global players, inputs, conns
     try:
-        conn.send(pickle.dumps(jugador_id))  # Mandamos ID al cliente
-        print(f"[SERVIDOR] Jugador {jugador_id} conectado")
+        conn.send(pickle.dumps(player_id))  # Send player ID to client
+        print(f"[SERVER] Player {player_id} connected.")
         with lock:
-            conns[jugador_id] = conn  # Guardar conexión
+            conns[player_id] = conn  # Save connection
 
         while True:
             try:
@@ -75,36 +75,36 @@ def manejar_cliente(conn, jugador_id):
                     break
                 input_data = pickle.loads(data)
                 with lock:
-                    inputs[jugador_id] = input_data
-                    # Verificar si el jugador quiere reaparecer
-                    if input_data.get("respawn", False) and jugadores[jugador_id].get("spectator", False):
-                        # Reaparecer jugador
+                    inputs[player_id] = input_data
+                    # Verify if player wants to respawn
+                    if input_data.get("respawn", False) and players[player_id].get("spectator", False):
+                        # Respawn player
                         x, y = get_spawn_position()
-                        jugadores[jugador_id].update({
-                            "x": x, "y": y, "vida": 100, "spectator": False, "balas": []
+                        players[player_id].update({
+                            "x": x, "y": y, "health": 100, "spectator": False, "bullets": []
                         })
-                        print(f"[SERVIDOR] Jugador {jugador_id} reapareció en ({x}, {y})")
+                        print(f"[SERVER] Player {player_id} respawned at ({x}, {y})")
             except (ConnectionResetError, ConnectionAbortedError):
                 break
             except Exception as e:
-                print(f"[SERVIDOR] Error procesando datos del jugador {jugador_id}: {e}")
+                print(f"[SERVER] Error processing {player_id} player data: {e}")
                 break
     except Exception as e:
-        print(f"[SERVIDOR] Error inicial con jugador {jugador_id}: {e}")
+        print(f"[SERVER] Initial error with player {player_id}: {e}")
 
-    # Limpiar al desconectar
+    # Clean up on disconnect
     with lock:
-        if jugador_id in jugadores:
-            del jugadores[jugador_id]
-        if jugador_id in inputs:
-            del inputs[jugador_id]
-        if jugador_id in conns:
-            del conns[jugador_id]
-    print(f"[SERVIDOR] Jugador {jugador_id} desconectado")
+        if player_id in players:
+            del players[player_id]
+        if player_id in inputs:
+            del inputs[player_id]
+        if player_id in conns:
+            del conns[player_id]
+    print(f"[SERVER] Player {player_id} disconnected.")
     conn.close()
 
 def game_loop():
-    global jugadores, inputs, conns, health_pickups
+    global players, inputs, conns, health_pickups
     last_time = time.time()
     tick_count = 0
 
@@ -118,185 +118,185 @@ def game_loop():
         tick_count += 1
 
         with lock:
-            # Mantener número correcto de vidas cada 60 ticks (1 segundo)
+            # Maintain correct number of health pickups every 60 ticks (1 second)
             if tick_count % 60 == 0:
                 maintain_health_pickups()
 
-            # Procesar inputs y actualizar estado
-            for jid, j in jugadores.items():
-                if j.get("spectator", False):
+            # Process player movements and actions
+            for pid, p in players.items():
+                if p.get("spectator", False):
                     continue
 
-                inp = inputs.get(jid, {})
+                inp = inputs.get(pid, {})
                 move = inp.get("move", [0,0])
 
-                # Movimiento con velocidad variable
+                # Movement with variable speed
                 speed = 7 if inp.get("sprint", False) else 5
-                j["x"] += move[0] * speed
-                j["y"] += move[1] * speed
-                j["x"] = max(0, min(j["x"], MAP_WIDTH-40))
-                j["y"] = max(0, min(j["y"], MAP_HEIGHT-40))
+                p["x"] += move[0] * speed
+                p["y"] += move[1] * speed
+                p["x"] = max(0, min(p["x"], MAP_WIDTH-40))
+                p["y"] = max(0, min(p["y"], MAP_HEIGHT-40))
 
-                # Verificar colisión con vidas
-                player_rect = (j["x"], j["y"], 40, 40)
-                for pickup in health_pickups[:]:  # Copia para modificar durante iteración
+                # Verify heatlh pickup collisions
+                player_rect = (p["x"], p["y"], 40, 40)
+                for pickup in health_pickups[:]:  # Copy to avoid modification during iteration
                     pickup_radius = 15
-                    # Distancia entre centro del jugador y centro de la vida
-                    dist = math.hypot((j["x"]+20) - pickup["x"], (j["y"]+20) - pickup["y"])
-                    if dist < pickup_radius + 20 and j["vida"] < 100:  # Solo si no tiene vida llena
-                        # Recoger vida
-                        j["vida"] = min(100, j["vida"] + 10)
+                    # Distance between player center and health center
+                    dist = math.hypot((p["x"]+20) - pickup["x"], (p["y"]+20) - pickup["y"])
+                    if dist < pickup_radius + 20 and p["health"] < 100:  # Only if not full health
+                        # Pickup collected
+                        p["health"] = min(100, p["health"] + 10)
                         health_pickups.remove(pickup)
-                        # Spawn nueva vida inmediatamente
+                        # Spawn a new health pickup
                         health_pickups.append(spawn_health_pickup())
-                        print(f"[SERVIDOR] Jugador {jid} recogió vida en ({pickup['x']}, {pickup['y']}) - Vida: {j['vida']}")
+                        print(f"[SERVER] Player {pid} picked health up at ({pickup['x']}, {pickup['y']}) - Health: {p['health']}")
                         break
 
-                # Shooting con cooldown
+                # Shooting mechanics
                 shoot = inp.get("shoot", None)
                 current_time = time.time()
 
                 if shoot == "suicide":
-                    j["vida"] -= 10
-                elif isinstance(shoot, list) and current_time - j.get("last_shot", 0) > 0.2:  # Cooldown de 200ms
+                    p["health"] -= 10
+                elif isinstance(shoot, list) and current_time - p.get("last_shot", 0) > 0.2:  # 200ms cooldown
                     mx, my = shoot
-                    # Calcular dirección de disparo mejorada
-                    cam_x = max(0, min(j["x"] - WIDTH//2, MAP_WIDTH - WIDTH))
-                    cam_y = max(0, min(j["y"] - HEIGHT//2, MAP_HEIGHT - HEIGHT))
+                    # Calculate camera offset
+                    cam_x = max(0, min(p["x"] - WIDTH//2, MAP_WIDTH - WIDTH))
+                    cam_y = max(0, min(p["y"] - HEIGHT//2, MAP_HEIGHT - HEIGHT))
                     target_x = mx + cam_x
                     target_y = my + cam_y
 
-                    dx, dy = target_x - (j["x"]+20), target_y - (j["y"]+20)
+                    dx, dy = target_x - (p["x"]+20), target_y - (p["y"]+20)
                     dist = math.hypot(dx, dy)
                     if dist > 0:
                         dx, dy = dx/dist, dy/dist
-                        j["balas"].append({
-                            "x": j["x"]+20, "y": j["y"]+20,
+                        p["bullets"].append({
+                            "x": p["x"]+20, "y": p["y"]+20,
                             "dx": dx, "dy": dy,
-                            "owner": jid,
+                            "owner": pid,
                             "lifetime": 0
                         })
-                        j["last_shot"] = current_time
+                        p["last_shot"] = current_time
 
-            # Actualizar balas y colisiones
-            for jid, j in jugadores.items():
-                if j.get("spectator", False):
+            # Update bullets positions and check for collisions
+            for pid, p in players.items():
+                if p.get("spectator", False):
                     continue
 
-                nuevas_balas = []
-                for bala in j["balas"]:
-                    bala["x"] += bala["dx"] * 12  # Velocidad aumentada
+                new_bullets = []
+                for bala in p["bullets"]:
+                    bala["x"] += bala["dx"] * 12  # Velocity increased
                     bala["y"] += bala["dy"] * 12
                     bala["lifetime"] += 1
 
-                    # Eliminar balas que salen del mapa o son muy viejas
+                    # Delete bullets that go out of bounds or are too old
                     if (0 < bala["x"] < MAP_WIDTH and 0 < bala["y"] < MAP_HEIGHT
-                        and bala["lifetime"] < 300):  # 5 segundos a 60fps
+                        and bala["lifetime"] < 300):  # 5 seconds at 60fps
 
-                        # Colisión con otros jugadores
+                        # Collision detection with other players
                         hit = False
-                        for oid, o in jugadores.items():
-                            if oid == jid or o.get("spectator", False):
+                        for oid, o in players.items():
+                            if oid == pid or o.get("spectator", False):
                                 continue
 
-                            # Mejorar detección de colisiones
+                            # Improved collision detection
                             if (o["x"] <= bala["x"] <= o["x"]+40 and
                                 o["y"] <= bala["y"] <= o["y"]+40):
-                                o["vida"] -= 15  # Más daño
+                                o["health"] -= 15  # More damage
                                 hit = True
-                                # Estadísticas
-                                j["kills"] = j.get("kills", 0)
-                                if o["vida"] <= 0:
-                                    j["kills"] += 1
+                                # Statistics
+                                p["kills"] = p.get("kills", 0)
+                                if o["health"] <= 0:
+                                    p["kills"] = p.get("kills", 0) + 1
                                     o["deaths"] = o.get("deaths", 0) + 1
                                 break
 
                         if not hit:
-                            nuevas_balas.append(bala)
+                            new_bullets.append(bala)
 
-                j["balas"] = nuevas_balas
+                p["bullets"] = new_bullets
 
-            # Modo espectador y regeneración de vida
-            for jid, j in jugadores.items():
-                if not j.get("spectator", False):
-                    if j["vida"] <= 0:
-                        j["spectator"] = True
-                        j["death_time"] = time.time()
-                    elif j["vida"] < 100 and tick_count % 120 == 0:  # Regenerar cada 2 segundos
-                        j["vida"] = min(100, j["vida"] + 2)
+            # Spectator mode and health regeneration
+            for pid, p in players.items():
+                if not p.get("spectator", False):
+                    if p["health"] <= 0:
+                        p["spectator"] = True
+                        p["death_time"] = time.time()
+                    elif p["health"] < 100 and tick_count % 120 == 0:  # Regenerate every 2 seconds
+                        p["health"] = min(100, p["health"] + 2)
 
-            # Enviar estado optimizado a cada cliente
-            if tick_count % 2 == 0:  # Reducir frecuencia a 30fps
+            # Send game state to all players
+            if tick_count % 2 == 0:  # Reduce frequency to every 2 ticks (30 times per second)
                 connections_to_remove = []
-                for jid, conn in conns.items():
-                    if jid in jugadores:
-                        estado = {
-                            "jugadores": jugadores.copy(),
-                            "jugador_id": jid,
-                            "spectator": jugadores[jid].get("spectator", False),
+                for pid, conn in conns.items():
+                    if pid in players:
+                        state = {
+                            "players": players.copy(),
+                            "player_id": pid,
+                            "spectator": players[pid].get("spectator", False),
                             "health_pickups": health_pickups.copy(),
                             "tick": tick_count
                         }
                         try:
-                            data = pickle.dumps(estado)
+                            data = pickle.dumps(state)
                             conn.sendall(data)
                         except (BrokenPipeError, ConnectionResetError):
-                            connections_to_remove.append(jid)
+                            connections_to_remove.append(pid)
                         except Exception as e:
-                            print(f"[SERVIDOR] Error enviando a jugador {jid}: {e}")
-                            connections_to_remove.append(jid)
+                            print(f"[SERVER] Error sendint to player {pid}: {e}")
+                            connections_to_remove.append(pid)
 
-                # Limpiar conexiones rotas
-                for jid in connections_to_remove:
-                    if jid in conns:
-                        del conns[jid]
+                # Clean up disconnected players
+                for pid in connections_to_remove:
+                    if pid in conns:
+                        del conns[pid]
 
 def main():
-    global id_count, jugadores
+    global id_count, players
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Permitir reusar puerto
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Allow address reuse
 
     try:
         server.bind(("0.0.0.0", 5555))
-        server.listen(10)  # Permitir más conexiones concurrentes
-        print("[SERVIDOR] Servidor iniciado en puerto 5555...")
-        print("[SERVIDOR] Esperando jugadores...")
+        server.listen(10)  # Allow up to 10 connections in the queue
+        print("[SERVER] Server starting in port 5555...")
+        print("[SERVER] Waiting for players...")
 
-        # Iniciar game loop
+        # Start game loop in a separate thread
         threading.Thread(target=game_loop, daemon=True).start()
 
         while True:
             try:
                 conn, addr = server.accept()
-                print(f"[NUEVA CONEXIÓN] {addr}")
+                print(f"[NEW CONNECTION] {addr}")
                 id_count += 1
 
-                # Crear jugador con posición y color aleatorios
+                # Create new player
                 spawn_x, spawn_y = get_spawn_position()
                 color = get_player_color()
 
                 with lock:
-                    jugadores[id_count] = {
+                    players[id_count] = {
                         "x": spawn_x, "y": spawn_y,
                         "color": color,
-                        "balas": [],
-                        "vida": 100,
+                        "bullets": [],
+                        "health": 100,
                         "spectator": False,
                         "kills": 0,
                         "deaths": 0,
                         "last_shot": 0
                     }
 
-                threading.Thread(target=manejar_cliente, args=(conn, id_count)).start()
+                threading.Thread(target=manage_client, args=(conn, id_count)).start()
 
             except KeyboardInterrupt:
-                print("\n[SERVIDOR] Cerrando servidor...")
+                print("\n[SERVER] Closing server...")
                 break
             except Exception as e:
-                print(f"[SERVIDOR] Error aceptando conexión: {e}")
+                print(f"[SERVER] Error accepting connections: {e}")
 
     except Exception as e:
-        print(f"[SERVIDOR] Error iniciando servidor: {e}")
+        print(f"[SERVER] Error starting server: {e}")
     finally:
         server.close()
 
