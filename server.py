@@ -184,14 +184,14 @@ def game_loop():
                     continue
 
                 new_bullets = []
-                for bala in p["bullets"]:
-                    bala["x"] += bala["dx"] * 12  # Velocity increased
-                    bala["y"] += bala["dy"] * 12
-                    bala["lifetime"] += 1
+                for bullet in p["bullets"]:
+                    bullet["x"] += bullet["dx"] * 12  # Velocity increased
+                    bullet["y"] += bullet["dy"] * 12
+                    bullet["lifetime"] += 1
 
                     # Delete bullets that go out of bounds or are too old
-                    if (0 < bala["x"] < MAP_WIDTH and 0 < bala["y"] < MAP_HEIGHT
-                        and bala["lifetime"] < 300):  # 5 seconds at 60fps
+                    if (0 < bullet["x"] < MAP_WIDTH and 0 < bullet["y"] < MAP_HEIGHT
+                        and bullet["lifetime"] < 300):  # 5 seconds at 60fps
 
                         # Collision detection with other players
                         hit = False
@@ -200,8 +200,8 @@ def game_loop():
                                 continue
 
                             # Improved collision detection
-                            if (o["x"] <= bala["x"] <= o["x"]+40 and
-                                o["y"] <= bala["y"] <= o["y"]+40):
+                            if (o["x"] <= bullet["x"] <= o["x"]+40 and
+                                o["y"] <= bullet["y"] <= o["y"]+40):
                                 o["health"] -= 15  # More damage
                                 hit = True
                                 # Statistics
@@ -212,7 +212,7 @@ def game_loop():
                                 break
 
                         if not hit:
-                            new_bullets.append(bala)
+                            new_bullets.append(bullet)
 
                 p["bullets"] = new_bullets
 
